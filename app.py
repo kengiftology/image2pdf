@@ -88,51 +88,48 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>画像 → PDF 変換</title>
+<title>画像 → PDF</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Yu Gothic UI',sans-serif;background:#1e1e2e;color:#e2e2f0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 16px}
-h1{font-size:1.6rem;color:#a78bfa;margin-bottom:6px}
-.sub{color:#888aaa;font-size:.85rem;margin-bottom:32px}
-.card{background:#2a2a3e;border:1px solid #3a3a5a;border-radius:16px;padding:28px;width:100%;max-width:580px;margin-bottom:20px}
-/* ドロップゾーン */
-#drop{border:2px dashed #4a4a6a;border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:.2s;color:#888aaa;font-size:1rem}
-#drop.over{border-color:#7c6af7;background:#2d2b50;color:#a78bfa}
-#drop svg{display:block;margin:0 auto 12px;opacity:.5}
-/* ファイルリスト */
-#file-list{margin-top:16px;max-height:200px;overflow-y:auto}
-.file-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:.82rem;color:#c8c8e8}
-.file-item:hover{background:#333355}
-.file-item .num{color:#7c6af7;font-weight:bold;min-width:28px;text-align:right}
-.file-count{color:#a78bfa;font-size:.85rem;font-weight:bold;margin-top:10px}
-/* ボタン */
-.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-button{border:none;border-radius:8px;padding:9px 18px;font-size:.9rem;cursor:pointer;font-family:inherit;transition:.15s}
-.btn-primary{background:#7c6af7;color:#fff}
-.btn-primary:hover{background:#6455d6}
-.btn-primary:disabled{background:#444;cursor:not-allowed}
-.btn-sec{background:#3a3a5a;color:#c8c8e8}
-.btn-sec:hover{background:#4a4a6a}
-/* プログレス */
-#progress-wrap{margin-top:20px;display:none}
-.prog-bar-bg{background:#1e1e2e;border-radius:8px;height:12px;overflow:hidden;margin:8px 0}
-.prog-bar{background:linear-gradient(90deg,#7c6af7,#a78bfa);height:100%;width:0%;transition:width .3s;border-radius:8px}
-#prog-text{font-size:.82rem;color:#888aaa}
-/* 完了 */
-#done-wrap{display:none;text-align:center;padding:12px 0}
-#done-wrap p{color:#4ade80;font-size:1.1rem;margin-bottom:14px}
-.btn-dl{background:linear-gradient(90deg,#7c6af7,#a78bfa);color:#fff;font-size:1rem;padding:12px 32px;border-radius:10px}
-.btn-dl:hover{opacity:.85}
+body{font-family:'Yu Gothic UI',Helvetica,sans-serif;background:#fff;color:#111;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:60px 16px}
+h1{font-size:1.3rem;font-weight:600;letter-spacing:.04em;margin-bottom:4px}
+.sub{color:#999;font-size:.78rem;margin-bottom:40px;letter-spacing:.03em}
+.wrap{width:100%;max-width:520px}
+#drop{border:1.5px solid #ccc;padding:48px 20px;text-align:center;cursor:pointer;transition:.15s;color:#aaa;font-size:.9rem;line-height:1.8}
+#drop:hover,#drop.over{border-color:#111;color:#111}
+#drop svg{display:block;margin:0 auto 14px;color:#bbb}
+#drop.over svg{color:#111}
+#file-list{margin-top:16px;max-height:180px;overflow-y:auto;border-top:1px solid #eee}
+.file-item{display:flex;align-items:center;gap:10px;padding:6px 4px;font-size:.8rem;color:#555;border-bottom:1px solid #f0f0f0}
+.file-item .num{color:#999;min-width:24px;text-align:right;font-variant-numeric:tabular-nums}
+#file-count{font-size:.78rem;color:#999;margin-top:8px}
+.btn-row{display:flex;gap:8px;margin-top:20px}
+button{border:1.5px solid #111;background:#fff;color:#111;padding:8px 20px;font-size:.85rem;cursor:pointer;font-family:inherit;transition:.15s;letter-spacing:.03em}
+button:hover{background:#111;color:#fff}
+button:disabled{border-color:#ccc;color:#ccc;cursor:not-allowed}
+button:disabled:hover{background:#fff;color:#ccc}
+.btn-primary{background:#111;color:#fff}
+.btn-primary:hover{background:#333}
+.btn-primary:disabled{background:#ccc;border-color:#ccc;color:#fff}
+.btn-primary:disabled:hover{background:#ccc;color:#fff}
+#progress-wrap{margin-top:24px;display:none}
+.prog-bar-bg{background:#eee;height:2px;margin:10px 0}
+.prog-bar{background:#111;height:100%;width:0%;transition:width .3s}
+#prog-text{font-size:.78rem;color:#999}
+#done-wrap{display:none;margin-top:24px;padding-top:24px;border-top:1px solid #eee;text-align:center}
+#done-wrap p{font-size:.9rem;margin-bottom:16px;color:#111}
+.btn-dl{background:#111;color:#fff;border:none;padding:10px 32px;font-size:.9rem;cursor:pointer;letter-spacing:.04em}
+.btn-dl:hover{background:#333}
 input[type=file]{display:none}
 </style>
 </head>
 <body>
-<h1>📷 画像 → PDF 変換</h1>
-<p class="sub">A4横 ／ 4:3横長クロップ ／ 上下マージン 7.5mm</p>
+<h1>画像 → PDF 変換</h1>
+<p class="sub">A4横 &nbsp;/&nbsp; 4:3クロップ &nbsp;/&nbsp; 上下マージン 7.5mm</p>
 
-<div class="card">
+<div class="wrap">
   <div id="drop" onclick="document.getElementById('file-input').click()">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
       <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
     </svg>
@@ -141,11 +138,11 @@ input[type=file]{display:none}
   <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.heic,.heif,.JPG,.JPEG,.PNG,.HEIC" multiple>
 
   <div id="file-list"></div>
-  <div id="file-count" class="file-count"></div>
+  <div id="file-count"></div>
 
   <div class="btn-row">
-    <button class="btn-primary" id="convert-btn" onclick="startConvert()" disabled>PDFを作成する</button>
-    <button class="btn-sec" onclick="clearFiles()">クリア</button>
+    <button class="btn-primary" id="convert-btn" onclick="startConvert()" disabled>PDF を作成</button>
+    <button onclick="clearFiles()">クリア</button>
   </div>
 
   <div id="progress-wrap">
@@ -154,10 +151,10 @@ input[type=file]{display:none}
   </div>
 
   <div id="done-wrap">
-    <p>✅ 変換完了！</p>
-    <a id="dl-link" href="#"><button class="btn-dl">📄 PDFをダウンロード</button></a>
+    <p>変換完了</p>
+    <a id="dl-link" href="#"><button class="btn-dl">PDF をダウンロード</button></a>
     <br><br>
-    <button class="btn-sec" onclick="resetAll()">もう一度変換する</button>
+    <button onclick="resetAll()" style="margin-top:8px">もう一度</button>
   </div>
 </div>
 
