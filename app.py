@@ -162,121 +162,122 @@ input[type=file]{display:none}
 let allFiles = [];
 let pollTimer = null;
 
-// ---- ドロップ ----
 const drop = document.getElementById('drop');
 drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
 drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-drop.addEventListener('drop', e => {
-  e.preventDefault(); drop.classList.remove('over');
-  addFiles([...e.dataTransfer.files]);
-});
-document.getElementById('file-input').addEventListener('change', e => {
-  addFiles([...e.target.files]);
-  e.target.value = '';
-});
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); addFiles([...e.dataTransfer.files]); });
+document.getElementById('file-input').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
 
 const EXTS = new Set(['.jpg','.jpeg','.png','.heic','.heif','.jpg_']);
+
+function numSortKey(name) {
+  const stem = name.replace(/\.[^.]+$/, '');
+  const nums = [...stem.matchAll(/\d+/g)].map(m => parseInt(m[0]));
+  return nums.length >= 2 ? nums[0] * 100000 + nums[1] : (nums[0] ?? 999) * 100000;
+}
 
 function addFiles(files) {
   const existing = new Set(allFiles.map(f => f.name + f.size));
   for (const f of files) {
     const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
     if (EXTS.has(ext) && !existing.has(f.name + f.size)) {
-      allFiles.push(f);
-      existing.add(f.name + f.size);
+      allFiles.push(f); existing.add(f.name + f.size);
     }
   }
-  allFiles.sort((a, b) => sortKey(a.name) < sortKey(b.name) ? -1 : 1);
+  allFiles.sort((a, b) => numSortKey(a.name) - numSortKey(b.name));
   renderList();
-}
-
-function sortKey(name) {
-  const stem = name.replace(/\.[^.]+$/, '');
-  const nums = [...stem.matchAll(/\d+/g)].map(m => parseInt(m[0]));
-  return nums.length >= 2 ? [nums[0], nums[1]] : [nums[0] ?? 999, 0];
 }
 
 function renderList() {
-  const list = document.getElementById('file-list');
-  const count = document.getElementById('file-count');
-  list.innerHTML = allFiles.map((f, i) =>
+  document.getElementById('file-list').innerHTML = allFiles.map((f, i) =>
     `<div class="file-item"><span class="num">${i+1}</span><span>${f.name}</span></div>`
   ).join('');
-  count.textContent = allFiles.length ? `${allFiles.length} ファイル` : '';
+  document.getElementById('file-count').textContent = allFiles.length ? `${allFiles.length} ファイル` : '';
   document.getElementById('convert-btn').disabled = allFiles.length === 0;
 }
 
-function clearFiles() {
-  allFiles = [];
-  renderList();
-  resetProgress();
-}
+function clearFiles() { allFiles = []; renderList(); resetUI(); }
 
-// ---- 変換 ----
+// ---- 変換: 1ファイルずつ送信 ----
 async function startConvert() {
   if (!allFiles.length) return;
   document.getElementById('convert-btn').disabled = true;
   document.getElementById('progress-wrap').style.display = 'block';
   document.getElementById('done-wrap').style.display = 'none';
-  setProgress(0, allFiles.length, 'アップロード中...');
 
-  const form = new FormData();
-  allFiles.forEach(f => form.append('files', f, f.name));
-
+  // 1) ジョブ作成
   let jobId;
   try {
-    const res = await fetch('/upload', { method: 'POST', body: form });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    jobId = data.job_id;
-  } catch(e) {
-    alert('アップロードエラー: ' + e.message);
-    document.getElementById('convert-btn').disabled = false;
-    return;
+    const r = await fetch('/api/start', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'start failed');
+    jobId = d.job_id;
+  } catch(e) { showError('ジョブ作成エラー: ' + (e.message || e)); return; }
+
+  // 2) 1枚ずつアップロード
+  const total = allFiles.length;
+  for (let i = 0; i < total; i++) {
+    setProgress(i, total, `アップロード中... [${i+1}/${total}] ${allFiles[i].name}`);
+    const form = new FormData();
+    form.append('file', allFiles[i], allFiles[i].name);
+    try {
+      const r = await fetch('/api/add/' + jobId, { method: 'POST', body: form });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'upload failed');
+    } catch(e) { showError(`アップロード失敗 (${allFiles[i].name}): ` + (e.message || e)); return; }
   }
 
-  // ポーリング
+  // 3) 変換開始
+  setProgress(total, total, 'PDF生成中...');
+  try {
+    const r = await fetch('/api/convert/' + jobId, { method: 'POST' });
+    if (!r.ok) throw new Error('convert start failed');
+  } catch(e) { showError('変換開始エラー: ' + (e.message || e)); return; }
+
+  // 4) ポーリング
   pollTimer = setInterval(async () => {
     try {
-      const res = await fetch('/status/' + jobId);
-      const d = await res.json();
+      const r = await fetch('/status/' + jobId);
+      const d = await r.json();
       if (d.status === 'done') {
         clearInterval(pollTimer);
-        setProgress(d.total, d.total, '完了！');
+        setProgress(d.total, d.total, '完了');
         showDone(jobId);
       } else if (d.status === 'error') {
         clearInterval(pollTimer);
-        alert('エラー: ' + d.error);
-        document.getElementById('convert-btn').disabled = false;
+        showError('変換エラー: ' + (d.error || '不明'));
       } else {
-        setProgress(d.progress, d.total, `[${d.progress}/${d.total}]  ${d.current ?? ''}`);
+        const cur = d.current ? `  ${d.current}` : '';
+        setProgress(d.progress, d.total, `PDF生成中... [${d.progress}/${d.total}]${cur}`);
       }
     } catch(e) {}
-  }, 600);
+  }, 800);
 }
 
 function setProgress(val, max, text) {
-  const pct = max ? Math.round(val / max * 100) : 0;
-  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('prog-bar').style.width = (max ? Math.round(val/max*100) : 0) + '%';
   document.getElementById('prog-text').textContent = text;
 }
 
 function showDone(jobId) {
   document.getElementById('done-wrap').style.display = 'block';
-  document.getElementById('dl-link').href = '/download/' + jobId;
-  document.getElementById('dl-link').download = 'output.pdf';
+  const a = document.getElementById('dl-link');
+  a.href = '/download/' + jobId; a.download = 'output.pdf';
 }
 
-function resetProgress() {
+function showError(msg) {
+  setProgress(0, 1, 'エラー: ' + msg);
+  document.getElementById('convert-btn').disabled = false;
+}
+
+function resetUI() {
+  if (pollTimer) clearInterval(pollTimer);
   document.getElementById('progress-wrap').style.display = 'none';
   document.getElementById('done-wrap').style.display = 'none';
   document.getElementById('convert-btn').disabled = false;
-  setProgress(0, 1, '');
 }
 
-function resetAll() {
-  clearFiles();
-}
+function resetAll() { clearFiles(); }
 </script>
 </body>
 </html>
@@ -288,25 +289,39 @@ def index():
     return render_template_string(HTML)
 
 
-@app.route("/upload", methods=["POST"])
-def upload():
-    files = request.files.getlist("files")
-    if not files:
-        return jsonify(error="ファイルがありません"), 400
-
-    file_list = sorted(
-        [(f.filename, f.read()) for f in files if Path(f.filename).suffix.lower() in EXTS],
-        key=lambda x: sort_key(x[0])
-    )
-    if not file_list:
-        return jsonify(error="対応画像が見つかりません"), 400
-
+@app.route("/api/start", methods=["POST"])
+def api_start():
     job_id = uuid.uuid4().hex
-    jobs[job_id] = {"status": "running", "progress": 0, "total": len(file_list),
-                    "current": "", "pdf_bytes": None}
-
-    threading.Thread(target=run_job, args=(job_id, file_list), daemon=True).start()
+    jobs[job_id] = {"status": "collecting", "files": [],
+                    "progress": 0, "total": 0, "current": "", "pdf_bytes": None}
     return jsonify(job_id=job_id)
+
+
+@app.route("/api/add/<job_id>", methods=["POST"])
+def api_add(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify(error="job not found"), 404
+    f = request.files.get("file")
+    if not f:
+        return jsonify(error="no file"), 400
+    if Path(f.filename).suffix.lower() not in EXTS:
+        return jsonify(error="unsupported"), 400
+    job["files"].append((f.filename, f.read()))
+    return jsonify(ok=True, count=len(job["files"]))
+
+
+@app.route("/api/convert/<job_id>", methods=["POST"])
+def api_convert(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify(error="job not found"), 404
+    file_list = sorted(job["files"], key=lambda x: sort_key(x[0]))
+    job["files"] = []
+    job["status"] = "running"
+    job["total"] = len(file_list)
+    threading.Thread(target=run_job, args=(job_id, file_list), daemon=True).start()
+    return jsonify(ok=True)
 
 
 @app.route("/status/<job_id>")
