@@ -241,14 +241,16 @@ async function startConvert() {
       const d = await r.json();
       if (d.status === 'done') {
         clearInterval(pollTimer);
-        setProgress(d.total, d.total, '完了');
+        setProgress(d.total || 1, d.total || 1, '完了');
         showDone(jobId);
       } else if (d.status === 'error') {
         clearInterval(pollTimer);
         showError('変換エラー: ' + (d.error || '不明'));
       } else {
-        const cur = d.current ? `  ${d.current}` : '';
-        setProgress(d.progress, d.total, `PDF生成中... [${d.progress}/${d.total}]${cur}`);
+        const prog = d.progress || 0;
+        const tot  = d.total   || '?';
+        const cur  = d.current ? `  ${d.current}` : '';
+        setProgress(prog, d.total || 1, `PDF生成中... [${prog}/${tot}]${cur}`);
       }
     } catch(e) {}
   }, 800);
